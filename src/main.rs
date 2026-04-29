@@ -207,7 +207,9 @@ struct CratesClient {
 impl CratesClient {
     fn new() -> Self {
         let client = Client::builder()
-            .user_agent("cratesinfo/0.1.0 (https://github.com/cumulus13/crates-info; cumulus13@gmail.com)")
+            .user_agent(
+                "cratesinfo/0.1.0 (https://github.com/cumulus13/crates-info; cumulus13@gmail.com)",
+            )
             .timeout(Duration::from_secs(15))
             .build()
             .expect("Failed to build HTTP client");
@@ -313,7 +315,11 @@ fn header(title: &str) {
 }
 
 fn field(label: &str, value: &str) {
-    println!("  {:<22} {}", format!("{}:", label).cyan().bold(), value.bright_white());
+    println!(
+        "  {:<22} {}",
+        format!("{}:", label).cyan().bold(),
+        value.bright_white()
+    );
 }
 
 fn field_opt(label: &str, value: &Option<String>) {
@@ -416,7 +422,12 @@ fn render_text_readme(raw: &str) {
 // ─────────────────────────────────────────────────────────────
 
 fn cmd_info(client: &CratesClient, name: &str, show_readme: bool) {
-    print!("  {} {}/{}  ", "Fetching".dimmed(), "crates.io".bright_cyan(), name.bright_yellow());
+    print!(
+        "  {} {}/{}  ",
+        "Fetching".dimmed(),
+        "crates.io".bright_cyan(),
+        name.bright_yellow()
+    );
     let resp = match client.get_crate(name) {
         Ok(r) => r,
         Err(e) => {
@@ -443,13 +454,19 @@ fn cmd_info(client: &CratesClient, name: &str, show_readme: bool) {
     separator('─');
 
     field("Name", &krate.name);
-    field("Latest Version", &krate.max_version.bright_green().to_string());
+    field(
+        "Latest Version",
+        &krate.max_version.bright_green().to_string(),
+    );
     if let Some(stable) = &krate.max_stable_version {
         if stable != &krate.max_version {
             field("Latest Stable", stable);
         }
     }
-    field("Downloads (total)", &fmt_num(krate.downloads).yellow().to_string());
+    field(
+        "Downloads (total)",
+        &fmt_num(krate.downloads).yellow().to_string(),
+    );
     if let Some(r) = krate.recent_downloads {
         field("Downloads (90 days)", &fmt_num(r).yellow().to_string());
     }
@@ -504,7 +521,11 @@ fn cmd_info(client: &CratesClient, name: &str, show_readme: bool) {
                 field("MSRV (min Rust)", rv);
             }
             field("Downloads", &fmt_num(latest.downloads).yellow().to_string());
-            let yanked_display = if latest.yanked { "Yes".red().to_string() } else { "No".green().to_string() };
+            let yanked_display = if latest.yanked {
+                "Yes".red().to_string()
+            } else {
+                "No".green().to_string()
+            };
             field("Yanked", &yanked_display);
             if let Some(pb) = &latest.published_by {
                 let pub_str = match &pb.name {
@@ -513,7 +534,10 @@ fn cmd_info(client: &CratesClient, name: &str, show_readme: bool) {
                 };
                 field("Published By", &pub_str);
             }
-            field("Released", &fmt_date(&latest.created_at).dimmed().to_string());
+            field(
+                "Released",
+                &fmt_date(&latest.created_at).dimmed().to_string(),
+            );
 
             if let Some(feats) = &latest.features {
                 if let Some(obj) = feats.as_object() {
@@ -565,7 +589,11 @@ fn cmd_info(client: &CratesClient, name: &str, show_readme: bool) {
 }
 
 fn cmd_versions(client: &CratesClient, name: &str, show_all: bool) {
-    print!("  {} {} versions... ", "Fetching".dimmed(), name.bright_yellow());
+    print!(
+        "  {} {} versions... ",
+        "Fetching".dimmed(),
+        name.bright_yellow()
+    );
     let versions = match client.get_versions(name) {
         Ok(v) => v,
         Err(e) => {
@@ -605,7 +633,10 @@ fn cmd_versions(client: &CratesClient, name: &str, show_all: bool) {
         } else {
             String::new()
         };
-        let size_str = v.crate_size.map(fmt_size).unwrap_or_else(|| "—".to_string());
+        let size_str = v
+            .crate_size
+            .map(fmt_size)
+            .unwrap_or_else(|| "—".to_string());
         let lic_str = v.license.clone().unwrap_or_else(|| "—".to_string());
 
         println!(
@@ -913,10 +944,16 @@ fn main() {
         Commands::Versions { crate_name, all } => {
             cmd_versions(&client, &crate_name, all);
         }
-        Commands::Deps { crate_name, version } => {
+        Commands::Deps {
+            crate_name,
+            version,
+        } => {
             cmd_deps(&client, &crate_name, version);
         }
-        Commands::Readme { crate_name, version } => {
+        Commands::Readme {
+            crate_name,
+            version,
+        } => {
             cmd_readme(&client, &crate_name, &version);
         }
         Commands::Search { query, limit } => {

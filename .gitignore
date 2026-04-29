@@ -4,3 +4,9 @@
 *sublime*
 bin/
 *.exe
+
+# Added entries (1 items)
+*.bak
+
+# Added entries (1 items)
+PLAN.md
