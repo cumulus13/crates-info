@@ -1,0 +1,35 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Publish to crates.io — runs automatically after a release is created
+# Requires: CARGO_REGISTRY_TOKEN secret set in repo Settings → Secrets
+# ─────────────────────────────────────────────────────────────────────────────
+name: Publish to crates.io
+
+on:
+  release:
+    types: [published]   # fires when the GitHub Release goes live (not draft)
+
+jobs:
+  publish:
+    name: cargo publish
+    runs-on: ubuntu-latest
+    # Don't publish pre-releases (tags like v1.0.0-beta.1)
+    if: "!contains(github.ref_name, '-')"
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install stable Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: publish-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Publish to crates.io
+        run: cargo publish --no-verify
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
