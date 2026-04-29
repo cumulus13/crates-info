@@ -392,14 +392,14 @@ fn render_text_readme(raw: &str) {
     for line in text.lines() {
         let trimmed = line.trim_end();
 
-        if trimmed.starts_with("### ") {
-            println!("  {}", trimmed[4..].yellow().bold());
-        } else if trimmed.starts_with("## ") {
+        if let Some(stripped) = trimmed.strip_prefix("### ") {
+            println!("  {}", stripped.yellow().bold());
+        } else if let Some(stripped) = trimmed.strip_prefix("## ") {
             println!();
-            println!("  {}", trimmed[3..].bright_cyan().bold());
-        } else if trimmed.starts_with("# ") {
+            println!("  {}", stripped.bright_cyan().bold());
+        } else if let Some(stripped) = trimmed.strip_prefix("# ") {
             println!();
-            println!("  {}", trimmed[2..].bright_white().bold().underline());
+            println!("  {}", stripped.bright_white().bold().underline());
         } else if trimmed.starts_with("```") {
             println!("  {}", trimmed.dimmed());
         } else if trimmed.starts_with("- ") || trimmed.starts_with("* ") {
