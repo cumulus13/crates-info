@@ -3,6 +3,8 @@ use colored::*;
 use reqwest::blocking::Client;
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
+use termimad::crossterm::style::Color::*;
+use termimad::MadSkin;
 use terminal_size::{terminal_size, Width};
 use textwrap::wrap;
 
@@ -322,12 +324,6 @@ fn field(label: &str, value: &str) {
     );
 }
 
-fn field_opt(label: &str, value: &Option<String>) {
-    if let Some(v) = value {
-        field(label, v);
-    }
-}
-
 fn fmt_num(n: u64) -> String {
     let s = n.to_string();
     let mut result = String::new();
@@ -379,41 +375,137 @@ fn strip_html(s: &str) -> String {
         .replace("&nbsp;", " ")
 }
 
-fn render_text_readme(raw: &str) {
-    let width = term_width();
-    let is_html = raw.trim_start().starts_with('<') || raw.contains("</");
+fn make_skin() -> MadSkin {
+    let mut skin = MadSkin::default_dark();
 
+    // H1 — bright magenta bold, underlined
+    skin.headers[0].set_fg(Rgb {
+        r: 255,
+        g: 100,
+        b: 200,
+    });
+    skin.headers[0].add_attr(termimad::crossterm::style::Attribute::Bold);
+    skin.headers[0].add_attr(termimad::crossterm::style::Attribute::Underlined);
+
+    // H2 — bright cyan bold
+    skin.headers[1].set_fg(Rgb {
+        r: 80,
+        g: 220,
+        b: 255,
+    });
+    skin.headers[1].add_attr(termimad::crossterm::style::Attribute::Bold);
+
+    // H3 — yellow bold
+    skin.headers[2].set_fg(Rgb {
+        r: 255,
+        g: 200,
+        b: 60,
+    });
+    skin.headers[2].add_attr(termimad::crossterm::style::Attribute::Bold);
+
+    // Bold — bright green
+    skin.bold.set_fg(Rgb {
+        r: 120,
+        g: 255,
+        b: 120,
+    });
+    skin.bold
+        .add_attr(termimad::crossterm::style::Attribute::Bold);
+
+    // Italic — light orange
+    skin.italic.set_fg(Rgb {
+        r: 255,
+        g: 180,
+        b: 80,
+    });
+
+    // Inline code — dark bg, bright text
+    skin.inline_code.set_fg(Rgb {
+        r: 255,
+        g: 130,
+        b: 80,
+    });
+    skin.inline_code.set_bg(Rgb {
+        r: 40,
+        g: 40,
+        b: 50,
+    });
+
+    // Code blocks
+    skin.code_block.set_fg(Rgb {
+        r: 200,
+        g: 200,
+        b: 200,
+    });
+    skin.code_block.set_bg(Rgb {
+        r: 30,
+        g: 30,
+        b: 40,
+    });
+
+    // Bullet — bright cyan bullet char
+    skin.bullet = termimad::StyledChar::from_fg_char(
+        Rgb {
+            r: 80,
+            g: 220,
+            b: 255,
+        },
+        '❯',
+    );
+
+    // Quotes — purple italic
+    skin.quote_mark = termimad::StyledChar::from_fg_char(
+        Rgb {
+            r: 180,
+            g: 100,
+            b: 255,
+        },
+        '▌',
+    );
+
+    // Horizontal rule
+    skin.horizontal_rule = termimad::StyledChar::from_fg_char(
+        Rgb {
+            r: 60,
+            g: 80,
+            b: 100,
+        },
+        '─',
+    );
+
+    // Table
+    skin.table.set_fg(Rgb {
+        r: 80,
+        g: 140,
+        b: 200,
+    });
+
+    // Strikeout
+    skin.strikeout.set_fg(Rgb {
+        r: 120,
+        g: 120,
+        b: 120,
+    });
+
+    skin
+}
+
+fn render_text_readme(raw: &str) {
+    let is_html = raw.trim_start().starts_with('<') || raw.contains("</");
     let text = if is_html {
         strip_html(raw)
     } else {
         raw.to_string()
     };
 
-    for line in text.lines() {
-        let trimmed = line.trim_end();
+    let skin = make_skin();
+    let width = term_width() as u16;
 
-        if let Some(stripped) = trimmed.strip_prefix("### ") {
-            println!("  {}", stripped.yellow().bold());
-        } else if let Some(stripped) = trimmed.strip_prefix("## ") {
-            println!();
-            println!("  {}", stripped.bright_cyan().bold());
-        } else if let Some(stripped) = trimmed.strip_prefix("# ") {
-            println!();
-            println!("  {}", stripped.bright_white().bold().underline());
-        } else if trimmed.starts_with("```") {
-            println!("  {}", trimmed.dimmed());
-        } else if trimmed.starts_with("- ") || trimmed.starts_with("* ") {
-            let bullet = format!("  {} {}", "•".green(), &trimmed[2..]);
-            for l in wrap(&bullet, width - 4) {
-                println!("{}", l);
-            }
-        } else if trimmed.is_empty() {
-            println!();
-        } else {
-            for l in wrap(trimmed, width - 4) {
-                println!("  {}", l);
-            }
-        }
+    // termimad wraps to width; print_text handles full markdown blocks
+    let area = termimad::Area::new(2, 0, width.saturating_sub(4), 9999);
+    if let Err(_) = skin.write_in_area(&text, &area) {
+        // fallback: plain print_text (no area positioning)
+        skin.print_text(&text);
     }
 }
 
@@ -443,6 +535,7 @@ fn cmd_info(client: &CratesClient, name: &str, show_readme: bool) {
 
     if let Some(desc) = &krate.description {
         let width = term_width() - 6;
+        println!();
         for line in wrap(desc.trim(), width) {
             println!("  {}", line.bright_white());
         }
@@ -450,45 +543,62 @@ fn cmd_info(client: &CratesClient, name: &str, show_readme: bool) {
     }
 
     separator('─');
-    println!("  {}", "METADATA".bright_cyan().bold());
+    println!("  📦 {}", "METADATA".bright_cyan().bold());
     separator('─');
 
-    field("Name", &krate.name);
+    field("📛  Name", &krate.name);
     field(
-        "Latest Version",
+        "🏷️   Latest Version",
         &krate.max_version.bright_green().to_string(),
     );
     if let Some(stable) = &krate.max_stable_version {
         if stable != &krate.max_version {
-            field("Latest Stable", stable);
+            field("✅  Latest Stable", stable);
         }
     }
     field(
-        "Downloads (total)",
+        "⬇️   Downloads (total)",
         &fmt_num(krate.downloads).yellow().to_string(),
     );
     if let Some(r) = krate.recent_downloads {
-        field("Downloads (90 days)", &fmt_num(r).yellow().to_string());
+        field("📈  Downloads (90d)", &fmt_num(r).yellow().to_string());
     }
-    field("Created", &fmt_date(&krate.created_at).dimmed().to_string());
-    field("Updated", &fmt_date(&krate.updated_at).dimmed().to_string());
+    field(
+        "🗓️   Created",
+        &fmt_date(&krate.created_at).dimmed().to_string(),
+    );
+    field(
+        "🔄  Updated",
+        &fmt_date(&krate.updated_at).dimmed().to_string(),
+    );
 
     println!();
-    println!("  {}", "LINKS".bright_cyan().bold());
+    println!("  🔗 {}", "LINKS".bright_cyan().bold());
     separator('─');
-    field_opt("Documentation", &krate.documentation);
-    field_opt("Homepage", &krate.homepage);
-    field_opt("Repository", &krate.repository);
+    if let Some(v) = &krate.documentation {
+        field("📚  Docs", v);
+    }
+    if let Some(v) = &krate.homepage {
+        field("🏠  Homepage", v);
+    }
+    if let Some(v) = &krate.repository {
+        field("💻  Repository", v);
+    }
 
     if let Some(keywords) = &resp.keywords {
         if !keywords.is_empty() {
             println!();
             separator('─');
-            println!("  {}", "KEYWORDS".bright_cyan().bold());
+            println!("  🏷️  {}", "KEYWORDS".bright_cyan().bold());
             separator('─');
             let kw: Vec<String> = keywords
                 .iter()
-                .map(|k| format!("[{}]", k.keyword).green().to_string())
+                .map(|k| {
+                    format!(" {} ", k.keyword)
+                        .on_bright_black()
+                        .bright_green()
+                        .to_string()
+                })
                 .collect();
             println!("  {}", kw.join("  "));
         }
@@ -498,10 +608,10 @@ fn cmd_info(client: &CratesClient, name: &str, show_readme: bool) {
         if !cats.is_empty() {
             println!();
             separator('─');
-            println!("  {}", "CATEGORIES".bright_cyan().bold());
+            println!("  📂 {}", "CATEGORIES".bright_cyan().bold());
             separator('─');
             for c in cats {
-                println!("  {} {}", "▸".yellow(), c.category.bright_white());
+                println!("  {} {}", "❯".yellow(), c.category.bright_white());
             }
         }
     }
@@ -510,32 +620,35 @@ fn cmd_info(client: &CratesClient, name: &str, show_readme: bool) {
         if let Some(latest) = versions.first() {
             println!();
             separator('─');
-            println!("  {}", "LATEST VERSION DETAILS".bright_cyan().bold());
+            println!("  🔖 {}", "LATEST VERSION DETAILS".bright_cyan().bold());
             separator('─');
-            field("Version", &latest.num.bright_green().to_string());
-            field("License", latest.license.as_deref().unwrap_or("N/A"));
+            field("🔢  Version", &latest.num.bright_green().to_string());
+            field("⚖️   License", latest.license.as_deref().unwrap_or("N/A"));
             if let Some(size) = latest.crate_size {
-                field("Crate Size", &fmt_size(size));
+                field("📦  Crate Size", &fmt_size(size));
             }
             if let Some(rv) = &latest.rust_version {
-                field("MSRV (min Rust)", rv);
+                field("🦀  MSRV", rv);
             }
-            field("Downloads", &fmt_num(latest.downloads).yellow().to_string());
+            field(
+                "⬇️   Downloads",
+                &fmt_num(latest.downloads).yellow().to_string(),
+            );
             let yanked_display = if latest.yanked {
-                "Yes".red().to_string()
+                "⛔ Yes".red().to_string()
             } else {
-                "No".green().to_string()
+                "✅ No".green().to_string()
             };
-            field("Yanked", &yanked_display);
+            field("🚫  Yanked", &yanked_display);
             if let Some(pb) = &latest.published_by {
                 let pub_str = match &pb.name {
                     Some(n) => format!("{} (@{})", n, pb.login),
                     None => format!("@{}", pb.login),
                 };
-                field("Published By", &pub_str);
+                field("👤  Published By", &pub_str);
             }
             field(
-                "Released",
+                "📅  Released",
                 &fmt_date(&latest.created_at).dimmed().to_string(),
             );
 
@@ -544,7 +657,7 @@ fn cmd_info(client: &CratesClient, name: &str, show_readme: bool) {
                     if !obj.is_empty() {
                         println!();
                         separator('─');
-                        println!("  {}", "FEATURES".bright_cyan().bold());
+                        println!("  ⚙️  {}", "FEATURES".bright_cyan().bold());
                         separator('─');
                         for (feat, deps) in obj {
                             let dep_strs: Vec<String> = deps
@@ -557,11 +670,11 @@ fn cmd_info(client: &CratesClient, name: &str, show_readme: bool) {
                                 })
                                 .unwrap_or_default();
                             if dep_strs.is_empty() {
-                                println!("  {} {}", "▸".yellow(), feat.bright_white());
+                                println!("  {} {}", "✔".green(), feat.bright_white());
                             } else {
                                 println!(
                                     "  {} {} {}",
-                                    "▸".yellow(),
+                                    "✔".green(),
                                     feat.bright_white(),
                                     format!("({})", dep_strs.join(", ")).dimmed()
                                 );
@@ -577,7 +690,7 @@ fn cmd_info(client: &CratesClient, name: &str, show_readme: bool) {
     separator('═');
     println!(
         "  {} {}  {}",
-        "Add to project:".dimmed(),
+        "🚀 Add to project:".dimmed(),
         format!("cargo add {}", krate.name).bright_yellow().bold(),
         format!("# v{}", krate.max_version).dimmed()
     );
@@ -611,7 +724,7 @@ fn cmd_versions(client: &CratesClient, name: &str, show_all: bool) {
     };
 
     header(&format!(
-        "  {} — {} versions  ",
+        "  📋 {} — {} versions  ",
         name.to_uppercase(),
         versions.len()
     ));
@@ -754,14 +867,14 @@ fn cmd_deps(client: &CratesClient, name: &str, version: Option<String>) {
         println!();
     };
 
-    print_deps("NORMAL DEPENDENCIES", |s| s.bright_cyan(), &normal);
-    print_deps("DEV DEPENDENCIES", |s| s.yellow(), &dev);
-    print_deps("BUILD DEPENDENCIES", |s| s.magenta(), &build);
+    print_deps("🧩 NORMAL DEPENDENCIES", |s| s.bright_cyan(), &normal);
+    print_deps("🧪 DEV DEPENDENCIES", |s| s.yellow(), &dev);
+    print_deps("🔨 BUILD DEPENDENCIES", |s| s.magenta(), &build);
 
     if deps_resp.dependencies.is_empty() {
         println!(
             "  {} This crate has no external dependencies.",
-            "ℹ".bright_cyan()
+            "🎉".bright_cyan()
         );
         println!();
     }
@@ -825,7 +938,7 @@ fn cmd_search(client: &CratesClient, query: &[String], limit: u32) {
     println!("{}", "✓".green().bold());
 
     header(&format!(
-        "  Search: \"{}\" — {} total results  ",
+        "  🔍 Search: \"{}\" — {} total results  ",
         q, results.meta.total
     ));
 
@@ -844,7 +957,7 @@ fn cmd_search(client: &CratesClient, query: &[String], limit: u32) {
             String::new()
         };
         println!(
-            "  {} {}{} {}",
+            "  {} 📦 {}{} {}",
             format!("{:>2}.", i + 1).dimmed(),
             c.name.bright_yellow().bold(),
             match_tag,
@@ -864,13 +977,13 @@ fn cmd_search(client: &CratesClient, query: &[String], limit: u32) {
             .unwrap_or_default();
         println!(
             "      {} {}{}  {} {}",
-            "↓".cyan(),
+            "⬇️".cyan(),
             dl.yellow(),
             recent.dimmed(),
             "updated:".dimmed(),
             fmt_date(&c.updated_at).dimmed()
         );
-        println!("      {}", format!("cargo add {}", c.name).dimmed());
+        println!("      🚀 {}", format!("cargo add {}", c.name).dimmed());
 
         if i < results.crates.len() - 1 {
             separator('─');
@@ -895,7 +1008,7 @@ fn cmd_owners(client: &CratesClient, name: &str) {
     };
     println!("{}", "✓".green().bold());
 
-    header(&format!("  {} — Owners  ", name.to_uppercase()));
+    header(&format!("  👥 {} — Owners  ", name.to_uppercase()));
 
     for owner in &owners.users {
         let kind = owner.kind.as_deref().unwrap_or("user");
@@ -930,10 +1043,10 @@ fn main() {
     println!();
     println!(
         "  {} {} {} {}",
-        "cratesinfo".bright_cyan().bold(),
+        "🦀 cratesinfo".bright_cyan().bold(),
         "─".dimmed(),
         "crates.io".bright_yellow(),
-        "explorer".dimmed()
+        "explorer 📦".dimmed()
     );
     println!();
 
