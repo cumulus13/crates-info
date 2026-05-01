@@ -503,7 +503,8 @@ fn render_text_readme(raw: &str) {
 
     // termimad wraps to width; print_text handles full markdown blocks
     let area = termimad::Area::new(2, 0, width.saturating_sub(4), 9999);
-    if let Err(_) = skin.write_in_area(&text, &area) {
+    // if let Err(_) = skin.write_in_area(&text, &area) {
+    if skin.write_in_area(&text, &area).is_err() {
         // fallback: plain print_text (no area positioning)
         skin.print_text(&text);
     }
