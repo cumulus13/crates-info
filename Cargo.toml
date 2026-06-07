@@ -1,6 +1,6 @@
 [package]
 name = "crates-info"
-version = "0.1.5"
+version = "0.1.6"
 edition = "2021"
 authors = ["Hadi Cahyadi <cumulus13@gmail.com>"]
 description = "A fast CLI tool to get detailed information about Rust crates from crates.io"
@@ -19,10 +19,11 @@ path = "src/main.rs"
 reqwest = { version = "=0.11.27", default-features = false, features = ["blocking", "json", "rustls-tls"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-clap = { version = "=4.4.18", features = ["derive", "color"] }
+clap = { version = "4", features = ["derive", "color"] }
 colored = "2"
 textwrap = "0.16"
 terminal_size = "0.3"
 url = "=2.4.1"
 idna = "=0.4.0"
 termimad = "0.23"
+clap-version-flag = "1.0.7"

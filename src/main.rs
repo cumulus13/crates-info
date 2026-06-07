@@ -7,6 +7,7 @@ use termimad::crossterm::style::Color::*;
 use termimad::MadSkin;
 use terminal_size::{terminal_size, Width};
 use textwrap::wrap;
+use clap_version_flag::colorful_version;
 
 // ─────────────────────────────────────────────────────────────
 // CLI definition
@@ -69,10 +70,19 @@ enum Commands {
         #[arg(short, long, default_value = "10")]
         limit: u32,
     },
-    /// Show owners of a crate
+    /// Show owners of a crate, or list all crates owned by a user
     Owners {
-        /// Crate name
-        crate_name: String,
+        /// Crate name (shows who owns it), OR GitHub login with --by flag (shows all their crates)
+        name: String,
+        /// Treat NAME as a GitHub/crates.io login — list all crates owned by that user
+        #[arg(short, long)]
+        by: bool,
+        /// Sort crates by: downloads (default), recent, name, updated
+        #[arg(short, long, default_value = "downloads")]
+        sort: String,
+        /// Max results when listing by owner (default: 50, 0 = all)
+        #[arg(short, long, default_value = "50")]
+        limit: u32,
     },
 }
 
@@ -197,6 +207,27 @@ struct Owner {
     kind: Option<String>,
 }
 
+#[derive(Debug, Deserialize, Serialize)]
+struct UserResponse {
+    user: UserInfo,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+struct UserInfo {
+    id: u64,
+    login: String,
+    name: Option<String>,
+    avatar: Option<String>,
+    url: Option<String>,
+}
+
+// Reuse SearchCrate for owner-crate listing (same shape)
+#[derive(Debug, Deserialize, Serialize)]
+struct OwnerCratesResponse {
+    crates: Vec<SearchCrate>,
+    meta: SearchMeta,
+}
+
 // ─────────────────────────────────────────────────────────────
 // HTTP client wrapper
 // ─────────────────────────────────────────────────────────────
@@ -289,6 +320,46 @@ impl CratesClient {
             .json::<OwnersResponse>()
             .map_err(|e| format!("Parse error: {e}"))
     }
+
+    fn get_user(&self, login: &str) -> Result<UserInfo, String> {
+        let url = format!("{}/users/{}", self.base, login);
+        let resp = self
+            .client
+            .get(&url)
+            .send()
+            .map_err(|e| format!("Network error: {e}"))?;
+        if resp.status().as_u16() == 404 {
+            return Err(format!("User '{login}' not found on crates.io"));
+        }
+        resp.json::<UserResponse>()
+            .map(|r| r.user)
+            .map_err(|e| format!("Parse error: {e}"))
+    }
+
+    fn get_crates_by_user(
+        &self,
+        user_id: u64,
+        sort: &str,
+        page: u32,
+        per_page: u32,
+    ) -> Result<OwnerCratesResponse, String> {
+        let sort_param = match sort {
+            "recent" | "recent_downloads" => "recent-downloads",
+            "name" | "alpha" => "alpha",
+            "updated" | "new" => "new",
+            _ => "downloads",
+        };
+        let url = format!(
+            "{}/crates?user_id={}&sort={}&page={}&per_page={}",
+            self.base, user_id, sort_param, page, per_page
+        );
+        self.client
+            .get(&url)
+            .send()
+            .map_err(|e| format!("Network error: {e}"))?
+            .json::<OwnerCratesResponse>()
+            .map_err(|e| format!("Parse error: {e}"))
+    }
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -310,10 +381,10 @@ fn separator(ch: char) {
 fn header(title: &str) {
     let w = term_width();
     println!();
-    println!("{}", "═".repeat(w).bright_cyan());
+    println!("{}", "=".repeat(w).bright_cyan());
     let pad = (w.saturating_sub(title.len())) / 2;
     println!("{}{}", " ".repeat(pad), title.bright_white().bold());
-    println!("{}", "═".repeat(w).bright_cyan());
+    println!("{}", "=".repeat(w).bright_cyan());
 }
 
 fn field(label: &str, value: &str) {
@@ -503,8 +574,7 @@ fn render_text_readme(raw: &str) {
 
     // termimad wraps to width; print_text handles full markdown blocks
     let area = termimad::Area::new(2, 0, width.saturating_sub(4), 9999);
-    // if let Err(_) = skin.write_in_area(&text, &area) {
-    if skin.write_in_area(&text, &area).is_err() {
+    if let Err(_) = skin.write_in_area(&text, &area) {
         // fallback: plain print_text (no area positioning)
         skin.print_text(&text);
     }
@@ -993,6 +1063,147 @@ fn cmd_search(client: &CratesClient, query: &[String], limit: u32) {
     separator('═');
 }
 
+fn cmd_by_owner(client: &CratesClient, login: &str, sort: &str, limit: u32) {
+    // Step 1: resolve login → user info
+    print!(
+        "  {} user {}... ",
+        "Looking up".dimmed(),
+        login.bright_yellow()
+    );
+    let user = match client.get_user(login) {
+        Ok(u) => {
+            println!("{}", "✓".green().bold());
+            u
+        }
+        Err(e) => {
+            println!("{}", "✗".red());
+            eprintln!("{} {}", "Error:".red().bold(), e);
+            std::process::exit(1);
+        }
+    };
+
+    // Step 2: fetch crates — handle pagination when limit == 0 (all)
+    let per_page: u32 = if limit == 0 || limit > 100 {
+        100
+    } else {
+        limit
+    };
+    print!(
+        "  {} crates owned by {}... ",
+        "Fetching".dimmed(),
+        login.bright_yellow()
+    );
+
+    let first = match client.get_crates_by_user(user.id, sort, 1, per_page) {
+        Ok(r) => r,
+        Err(e) => {
+            println!("{}", "✗".red());
+            eprintln!("{} {}", "Error:".red().bold(), e);
+            std::process::exit(1);
+        }
+    };
+    let total = first.meta.total;
+    println!(
+        "{} ({} total)",
+        "✓".green().bold(),
+        total.to_string().yellow()
+    );
+
+    // Collect pages if limit == 0 (fetch all)
+    let mut crates = first.crates;
+    if limit == 0 && total > per_page as u64 {
+        let pages = ((total as f64) / per_page as f64).ceil() as u32;
+        for page in 2..=pages {
+            if let Ok(r) = client.get_crates_by_user(user.id, sort, page, per_page) {
+                crates.extend(r.crates);
+            }
+        }
+    } else if limit > 0 {
+        crates.truncate(limit as usize);
+    }
+
+    // ── Header ────────────────────────────────────────────────────────────────
+    let display_name = match &user.name {
+        Some(n) if !n.is_empty() => format!("{} (@{})", n, user.login),
+        _ => format!("@{}", user.login),
+    };
+    header(&format!("  👤 {} — {} crates  ", display_name, total));
+
+    // user profile line
+    println!(
+        "  {} {}",
+        "🔗 Profile:".dimmed(),
+        user.url
+            .as_deref()
+            .unwrap_or("https://crates.io")
+            .bright_cyan()
+    );
+    println!(
+        "  {} {} sorted by {}",
+        "📋 Showing:".dimmed(),
+        if limit == 0 {
+            format!("all {}", total).yellow().to_string()
+        } else {
+            format!("{} of {}", crates.len(), total)
+                .yellow()
+                .to_string()
+        },
+        sort.bright_white()
+    );
+    println!();
+
+    let width = term_width();
+
+    for (i, c) in crates.iter().enumerate() {
+        let match_tag = if c.exact_match == Some(true) {
+            format!(" {}", "[exact]".bright_green())
+        } else {
+            String::new()
+        };
+        println!(
+            "  {} 📦 {}{} {}",
+            format!("{:>3}.", i + 1).dimmed(),
+            c.name.bright_yellow().bold(),
+            match_tag,
+            format!("v{}", c.max_version).bright_green()
+        );
+        if let Some(desc) = &c.description {
+            let d = desc.trim();
+            if !d.is_empty() {
+                for line in textwrap::wrap(d, width - 10) {
+                    println!("        {}", line.white());
+                }
+            }
+        }
+        let dl = fmt_num(c.downloads);
+        let recent = c
+            .recent_downloads
+            .map(|r| format!("  📈 {}", fmt_num(r)))
+            .unwrap_or_default();
+        println!(
+            "        ⬇️  {}{}  🔄 {}",
+            dl.yellow(),
+            recent.dimmed(),
+            fmt_date(&c.updated_at).dimmed()
+        );
+        println!("        🚀 {}", format!("cargo add {}", c.name).dimmed());
+        if i < crates.len() - 1 {
+            separator('─');
+        }
+    }
+
+    if limit > 0 && total > limit as u64 {
+        println!();
+        println!(
+            "  {} {} more crates not shown — use {} to see all",
+            "…".dimmed(),
+            (total - limit as u64).to_string().yellow(),
+            "--limit 0".bright_cyan()
+        );
+    }
+    separator('═');
+}
+
 fn cmd_owners(client: &CratesClient, name: &str) {
     print!(
         "  {} owners of {}... ",
@@ -1038,6 +1249,11 @@ fn cmd_owners(client: &CratesClient, name: &str) {
 // ─────────────────────────────────────────────────────────────
 
 fn main() {
+    let args: Vec<String> = std::env::args().collect();
+    if args.len() == 2 && (args[1] == "-V" || args[1] == "--version") {
+        let version = colorful_version!();
+        version.print_and_exit();
+    }
     let cli = Cli::parse();
     let client = CratesClient::new();
 
@@ -1073,8 +1289,17 @@ fn main() {
         Commands::Search { query, limit } => {
             cmd_search(&client, &query, limit);
         }
-        Commands::Owners { crate_name } => {
-            cmd_owners(&client, &crate_name);
+        Commands::Owners {
+            name,
+            by,
+            sort,
+            limit,
+        } => {
+            if by {
+                cmd_by_owner(&client, &name, &sort, limit);
+            } else {
+                cmd_owners(&client, &name);
+            }
         }
     }
 }
