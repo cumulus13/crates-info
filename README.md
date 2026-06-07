@@ -85,10 +85,11 @@ cratesinfo <COMMAND>
 | `readme <crate>` | Render README in the terminal |
 | `search <terms...>` | Search crates.io |
 | `search <terms> --limit N` | Limit results (default: 10) |
-| `owners <crate>` | List who owns a crate |
-| `owners <login> --by` | List all crates owned by a user |
-| `owners <login> --by --sort name` | Sort by: `downloads` (default), `recent`, `name`, `updated` |
-| `owners <login> --by --limit 0` | Fetch every crate (no limit) |
+| `owners <crate>` | Show who owns a crate |
+| `by <login>` | List all crates published by a user |
+| `by <login> --sort recent` | Sort by: `downloads` (default), `recent`, `name`, `updated` |
+| `by <login> --limit 0` | Fetch every page — show ALL crates |
+| `by-owner <login>` | Alias for `by` |
 
 ### Examples
 
@@ -102,9 +103,10 @@ cratesinfo readme reqwest
 cratesinfo search async runtime
 cratesinfo search http client --limit 5
 cratesinfo owners tokio
-cratesinfo owners alexcrichton --by
-cratesinfo owners dtolnay --by --sort recent --limit 10
-cratesinfo owners burntsushi --by --limit 0
+cratesinfo by dtolnay
+cratesinfo by alexcrichton --sort recent --limit 20
+cratesinfo by burntsushi --limit 0
+cratesinfo by-owner dtolnay --sort name
 ```
 
 ---

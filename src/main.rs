@@ -21,7 +21,7 @@ use clap_version_flag::colorful_version;
     version,
     about = "Get detailed info about Rust crates from crates.io",
     long_about = "A fast CLI tool to inspect Rust crates – metadata, versions, dependencies, features and README.",
-    after_help = "EXAMPLES:\n  cratesinfo info serde\n  cratesinfo versions tokio\n  cratesinfo deps serde 1.0.195\n  cratesinfo search async runtime\n  cratesinfo readme actix-web"
+    after_help = "EXAMPLES:\n  cratesinfo info serde\n  cratesinfo versions tokio\n  cratesinfo deps serde 1.0.195\n  cratesinfo search async runtime\n  cratesinfo readme actix-web\n  cratesinfo owners tokio\n  cratesinfo by dtolnay\n  cratesinfo by alexcrichton --sort recent --limit 20\n  cratesinfo by burntsushi --limit 0"
 )]
 struct Cli {
     #[command(subcommand)]
@@ -70,17 +70,21 @@ enum Commands {
         #[arg(short, long, default_value = "10")]
         limit: u32,
     },
-    /// Show owners of a crate, or list all crates owned by a user
+    /// Show who owns a crate
     Owners {
-        /// Crate name (shows who owns it), OR GitHub login with --by flag (shows all their crates)
-        name: String,
-        /// Treat NAME as a GitHub/crates.io login — list all crates owned by that user
-        #[arg(short, long)]
-        by: bool,
-        /// Sort crates by: downloads (default), recent, name, updated
-        #[arg(short, long, default_value = "downloads")]
+        /// Crate name
+        crate_name: String,
+    },
+    /// List all crates published by a crates.io user (by GitHub login)
+    #[command(alias = "by-owner")]
+    By {
+        /// GitHub / crates.io login name (e.g. dtolnay, burntsushi, alexcrichton)
+        login: String,
+        /// Sort by: downloads (default), recent, name, updated
+        #[arg(short, long, default_value = "downloads",
+              value_parser = ["downloads", "recent", "name", "updated"])]
         sort: String,
-        /// Max results when listing by owner (default: 50, 0 = all)
+        /// Maximum results to show (default: 50). Use 0 to fetch ALL pages
         #[arg(short, long, default_value = "50")]
         limit: u32,
     },
@@ -1289,17 +1293,11 @@ fn main() {
         Commands::Search { query, limit } => {
             cmd_search(&client, &query, limit);
         }
-        Commands::Owners {
-            name,
-            by,
-            sort,
-            limit,
-        } => {
-            if by {
-                cmd_by_owner(&client, &name, &sort, limit);
-            } else {
-                cmd_owners(&client, &name);
-            }
+        Commands::Owners { crate_name } => {
+            cmd_owners(&client, &crate_name);
+        }
+        Commands::By { login, sort, limit } => {
+            cmd_by_owner(&client, &login, &sort, limit);
         }
     }
 }
