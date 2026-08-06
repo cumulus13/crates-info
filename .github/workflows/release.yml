@@ -23,14 +23,14 @@ name: Release
 
 on:
   push:
-    # tags:
-    #   - "v[0-9]+.[0-9]+.[0-9]+*"   # v0.1.0, v1.2.3-beta.1, etc. (glob, not regex — Actions doesn't support `+`)
-    branches: ["master"]
-  # workflow_dispatch:            # manual escape hatch — run this from `gh` or the Actions tab
-  #   inputs:
-  #     tag:
-  #       description: "Tag to release (must already exist), e.g. v1.0.2"
-  #       required: true
+    tags:
+      - "v*"
+    branches: ["master", "main"]
+  workflow_dispatch:            # manual escape hatch — run this from `gh` or the Actions tab
+    inputs:
+      tag:
+        description: "Tag to release (must already exist), e.g. v1.0.2"
+        required: false
 
 env:
   CARGO_TERM_COLOR: always
@@ -238,7 +238,7 @@ jobs:
 
             **macOS (Apple Silicon)**
             ```sh
-            curl -L https://github.com/cumulus13/crates-info/releases/download/${{ env.RELEASE_TAG }}/cratesinfo-${{ env.RELEASE_TAG }}-macos-arm64.tar.gz | tar xz
+            curl -L https://github.com/cumulus13/crates-info/releases/download/${{ env.RELEASE_TAG }}/cratesinfo-${{ env.RELEASE_TAG }}-macOS-arm64.tar.gz | tar xz
             sudo mv cratesinfo /usr/local/bin/
             ```
 
