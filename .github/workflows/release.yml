@@ -24,7 +24,7 @@ name: Release
 on:
   push:
     tags:
-      - "v*.*.*"   # v0.1.0, v1.2.3-beta.1, etc. (glob, not regex — Actions doesn't support `+`)
+      - "v[0-9]+.[0-9]+.[0-9]+*"   # v0.1.0, v1.2.3-beta.1, etc. (glob, not regex — Actions doesn't support `+`)
   workflow_dispatch:            # manual escape hatch — run this from `gh` or the Actions tab
     inputs:
       tag:
@@ -274,4 +274,4 @@ jobs:
       - name: Publish
         run: cargo publish --allow-dirty
         env:
-          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }} 
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CRATES_TOKEN }}
