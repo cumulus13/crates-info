@@ -25,6 +25,11 @@ on:
   push:
     tags:
       - "v*.*.*"   # v0.1.0, v1.2.3-beta.1, etc. (glob, not regex — Actions doesn't support `+`)
+  workflow_dispatch:            # manual escape hatch — run this from `gh` or the Actions tab
+    inputs:
+      tag:
+        description: "Tag to release (must already exist), e.g. v1.0.2"
+        required: true
 
 env:
   CARGO_TERM_COLOR: always
@@ -79,6 +84,9 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+
+      - name: Resolve release tag
+        run: echo "RELEASE_TAG=${{ inputs.tag || github.ref_name }}" >> $GITHUB_ENV
 
       # Native builds need the target installed via rustup. Cross builds don't —
       # `cross` supplies its own sysroot inside the Docker image, and several of
@@ -158,7 +166,7 @@ jobs:
         if: runner.os != 'Windows'
         run: |
           cd target/${{ matrix.target }}/release
-          ARCHIVE="${{ env.BINARY_NAME }}-${{ github.ref_name }}-${{ matrix.asset_suffix }}.tar.gz"
+          ARCHIVE="${{ env.BINARY_NAME }}-${{ env.RELEASE_TAG }}-${{ matrix.asset_suffix }}.tar.gz"
           tar -czf "../../../${ARCHIVE}" ${{ env.BINARY_NAME }}
           echo "ASSET=${ARCHIVE}" >> $GITHUB_ENV
 
@@ -167,7 +175,7 @@ jobs:
         shell: pwsh
         run: |
           cd target/${{ matrix.target }}/release
-          $ARCHIVE = "${{ env.BINARY_NAME }}-${{ github.ref_name }}-${{ matrix.asset_suffix }}.zip"
+          $ARCHIVE = "${{ env.BINARY_NAME }}-${{ env.RELEASE_TAG }}-${{ matrix.asset_suffix }}.zip"
           Compress-Archive -Path "${{ env.BINARY_NAME }}.exe" -DestinationPath "../../../$ARCHIVE"
           echo "ASSET=$ARCHIVE" | Out-File -FilePath $env:GITHUB_ENV -Append
 
@@ -185,6 +193,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
+      - name: Resolve release tag
+        run: echo "RELEASE_TAG=${{ inputs.tag || github.ref_name }}" >> $GITHUB_ENV
 
       - name: Download all build artifacts
         uses: actions/download-artifact@v4
@@ -204,35 +215,35 @@ jobs:
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
-          name: "cratesinfo ${{ github.ref_name }}"
-          tag_name: ${{ github.ref_name }}
+          name: "cratesinfo ${{ env.RELEASE_TAG }}"
+          tag_name: ${{ env.RELEASE_TAG }}
           draft: false
-          prerelease: ${{ contains(github.ref_name, '-') }}
+          prerelease: ${{ contains(env.RELEASE_TAG, '-') }}
           generate_release_notes: true
           body: |
-            ## cratesinfo ${{ github.ref_name }}
+            ## cratesinfo ${{ env.RELEASE_TAG }}
 
             A fast CLI tool to get detailed info about Rust crates from crates.io.
 
             ### Installation
 
-            **Windows** — download `cratesinfo-${{ github.ref_name }}-windows-x86_64.zip`, extract, add to PATH.
+            **Windows** — download `cratesinfo-${{ env.RELEASE_TAG }}-windows-x86_64.zip`, extract, add to PATH.
 
             **macOS (Intel)**
             ```sh
-            curl -L https://github.com/cumulus13/crates-info/releases/download/${{ github.ref_name }}/cratesinfo-${{ github.ref_name }}-macos-x86_64.tar.gz | tar xz
+            curl -L https://github.com/cumulus13/crates-info/releases/download/${{ env.RELEASE_TAG }}/cratesinfo-${{ env.RELEASE_TAG }}-macos-x86_64.tar.gz | tar xz
             sudo mv cratesinfo /usr/local/bin/
             ```
 
             **macOS (Apple Silicon)**
             ```sh
-            curl -L https://github.com/cumulus13/crates-info/releases/download/${{ github.ref_name }}/cratesinfo-${{ github.ref_name }}-macos-arm64.tar.gz | tar xz
+            curl -L https://github.com/cumulus13/crates-info/releases/download/${{ env.RELEASE_TAG }}/cratesinfo-${{ env.RELEASE_TAG }}-macos-arm64.tar.gz | tar xz
             sudo mv cratesinfo /usr/local/bin/
             ```
 
             **Linux x86-64 (static)**
             ```sh
-            curl -L https://github.com/cumulus13/crates-info/releases/download/${{ github.ref_name }}/cratesinfo-${{ github.ref_name }}-linux-x86_64.tar.gz | tar xz
+            curl -L https://github.com/cumulus13/crates-info/releases/download/${{ env.RELEASE_TAG }}/cratesinfo-${{ env.RELEASE_TAG }}-linux-x86_64.tar.gz | tar xz
             sudo mv cratesinfo /usr/local/bin/
             ```
 
