@@ -16,3 +16,5 @@ download/
 
 # Added entries (1 items)
 target/
+# PT backup directory
+.pt/

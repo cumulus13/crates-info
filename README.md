@@ -33,13 +33,30 @@ A fast CLI tool to get detailed information about Rust crates from [crates.io](h
 
 Download the latest binary for your platform from the [Releases page](https://github.com/cumulus13/crates-info/releases):
 
-| Platform | File |
-|---|---|
-| Windows x64 | `cratesinfo-vX.Y.Z-windows-x86_64.zip` |
-| macOS Intel | `cratesinfo-vX.Y.Z-macos-x86_64.tar.gz` |
-| macOS Apple Silicon | `cratesinfo-vX.Y.Z-macos-arm64.tar.gz` |
-| Linux x64 (static) | `cratesinfo-vX.Y.Z-linux-x86_64.tar.gz` |
-| Linux ARM64 (static) | `cratesinfo-vX.Y.Z-linux-arm64.tar.gz` |
+| Platform                     | File                                        |
+| ---------------------------- | ------------------------------------------- |
+| Windows x64                  | `cratesinfo-vX.Y.Z-windows-x86_64.zip`      |
+| Windows x86 (32-bit)         | `cratesinfo-vX.Y.Z-windows-i686.zip`        |
+| Windows ARM64                | `cratesinfo-vX.Y.Z-windows-arm64.zip`       |
+| macOS Intel                  | `cratesinfo-vX.Y.Z-macos-x86_64.tar.gz`     |
+| macOS Apple Silicon          | `cratesinfo-vX.Y.Z-macos-arm64.tar.gz`      |
+| Linux x64 (static)           | `cratesinfo-vX.Y.Z-linux-x86_64.tar.gz`     |
+| Linux x86 (32-bit, static)   | `cratesinfo-vX.Y.Z-linux-i686.tar.gz`       |
+| Linux ARM64 (static)         | `cratesinfo-vX.Y.Z-linux-arm64.tar.gz`      |
+| Linux ARMv7 (static)         | `cratesinfo-vX.Y.Z-linux-armv7.tar.gz`      |
+| Linux ARMv6 (static)         | `cratesinfo-vX.Y.Z-linux-armv6.tar.gz`      |
+| Linux ARMv5 (static)         | `cratesinfo-vX.Y.Z-linux-armv5.tar.gz`      |
+| Linux MIPS                   | `cratesinfo-vX.Y.Z-linux-mips.tar.gz`       |
+| Linux MIPS (little-endian)   | `cratesinfo-vX.Y.Z-linux-mipsel.tar.gz`     |
+| Linux MIPS64                 | `cratesinfo-vX.Y.Z-linux-mips64.tar.gz`     |
+| Linux RISC-V64               | `cratesinfo-vX.Y.Z-linux-riscv64.tar.gz`    |
+| Linux s390x                  | `cratesinfo-vX.Y.Z-linux-s390x.tar.gz`      |
+| Linux ppc64le                | `cratesinfo-vX.Y.Z-linux-ppc64le.tar.gz`    |
+| FreeBSD x64                  | `cratesinfo-vX.Y.Z-freebsd-x86_64.tar.gz`   |
+| FreeBSD x86 (32-bit)         | `cratesinfo-vX.Y.Z-freebsd-i686.tar.gz`     |
+| NetBSD x64                   | `cratesinfo-vX.Y.Z-netbsd-x86_64.tar.gz`    |
+| Android / Termux ARM64       | `cratesinfo-vX.Y.Z-android-arm64.tar.gz`    |
+| Android / Termux ARMv7       | `cratesinfo-vX.Y.Z-android-armv7.tar.gz`    |
 
 **Windows** — extract the `.zip`, place `cratesinfo.exe` somewhere on your `PATH`  
 (e.g. `C:\Users\<you>\bin\` or `C:\Program Files\cratesinfo\`).

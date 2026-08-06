@@ -1,14 +1,23 @@
 # ─────────────────────────────────────────────────────────────────────────────
 # Release — triggers when you push a version tag: git tag v0.2.0 && git push --tags
 #
-# Builds native binaries for:
-#   Linux   x86-64  (musl — fully static, runs on any distro)
-#   Linux   ARM64   (musl)
-#   Windows x86-64  (.exe)
-#   macOS   x86-64  (Intel)
-#   macOS   ARM64   (Apple Silicon)
+# Platform coverage (grouped by how they're built):
 #
-# Then creates a GitHub Release and uploads all binaries as assets.
+#   Native runners (no Docker):
+#     Windows   x86_64 / i686 / arm64   (arm64 needs clang, preinstalled on windows-latest)
+#     macOS     x86_64 / arm64
+#
+#   Linux, via `cross` (Docker, confirmed supported by cross-rs):
+#     x86_64, i686, aarch64, armv7, armv6 (arm), armv5   [required]
+#     mips, mipsel, mips64, riscv64gc, s390x, ppc64le     [best-effort — see allow-failure]
+#     Android/Termux: aarch64, armv7                      [required]
+#
+#   BSD, via `cross`:
+#     FreeBSD x86_64 / i686, NetBSD x86_64                [best-effort]
+#
+#   NOT included — no maintained cross-rs image exists for these, so a build
+#   would either silently be wrong or just fail:
+#     OpenBSD (any arch), FreeBSD arm64/armv7, NetBSD arm
 # ─────────────────────────────────────────────────────────────────────────────
 name: Release
 
@@ -29,47 +38,67 @@ jobs:
   build:
     name: Build ${{ matrix.target }}
     runs-on: ${{ matrix.runner }}
+    continue-on-error: ${{ matrix.allow_failure || false }}
     strategy:
       fail-fast: false
       matrix:
         include:
-          # ── Linux x86-64 (static musl) ──────────────────────────────────────
-          - target: x86_64-unknown-linux-musl
-            runner: ubuntu-latest
-            asset_suffix: linux-x86_64
-            use_cross: true
+          # ── Linux — required, well-supported ──────────────────────────────
+          - { target: x86_64-unknown-linux-musl,       runner: ubuntu-latest, asset_suffix: linux-x86_64,  use_cross: true,  smoke_test: native }
+          - { target: i686-unknown-linux-gnu,          runner: ubuntu-latest, asset_suffix: linux-i686,    use_cross: true,  smoke_test: qemu }
+          - { target: aarch64-unknown-linux-musl,      runner: ubuntu-latest, asset_suffix: linux-arm64,   use_cross: true,  smoke_test: qemu }
+          - { target: armv7-unknown-linux-musleabihf,  runner: ubuntu-latest, asset_suffix: linux-armv7,   use_cross: true,  smoke_test: qemu }
+          - { target: arm-unknown-linux-musleabihf,    runner: ubuntu-latest, asset_suffix: linux-armv6,   use_cross: true,  smoke_test: qemu }
+          - { target: armv5te-unknown-linux-musleabi,  runner: ubuntu-latest, asset_suffix: linux-armv5,   use_cross: true,  smoke_test: qemu }
 
-          # ── Linux ARM64 (static musl) ───────────────────────────────────────
-          - target: aarch64-unknown-linux-musl
-            runner: ubuntu-latest
-            asset_suffix: linux-arm64
-            use_cross: true
+          # ── Linux — best-effort (portable-C fallback in `ring`, less battle-tested) ──
+          - { target: mips-unknown-linux-musl,          runner: ubuntu-latest, asset_suffix: linux-mips,     use_cross: true, smoke_test: qemu, allow_failure: true }
+          - { target: mipsel-unknown-linux-musl,        runner: ubuntu-latest, asset_suffix: linux-mipsel,   use_cross: true, smoke_test: qemu, allow_failure: true }
+          - { target: mips64-unknown-linux-muslabi64,   runner: ubuntu-latest, asset_suffix: linux-mips64,   use_cross: true, smoke_test: qemu, allow_failure: true }
+          - { target: riscv64gc-unknown-linux-musl,     runner: ubuntu-latest, asset_suffix: linux-riscv64,  use_cross: true, smoke_test: qemu, allow_failure: true }
+          - { target: s390x-unknown-linux-gnu,          runner: ubuntu-latest, asset_suffix: linux-s390x,    use_cross: true, smoke_test: qemu, allow_failure: true }
+          - { target: powerpc64le-unknown-linux-gnu,    runner: ubuntu-latest, asset_suffix: linux-ppc64le,  use_cross: true, smoke_test: qemu, allow_failure: true }
 
-          # ── Windows x86-64 ──────────────────────────────────────────────────
-          - target: x86_64-pc-windows-msvc
-            runner: windows-latest
-            asset_suffix: windows-x86_64
-            use_cross: false
+          # ── BSD — best-effort (no QEMU test support in cross-rs, build-only) ──
+          - { target: x86_64-unknown-freebsd, runner: ubuntu-latest, asset_suffix: freebsd-x86_64, use_cross: true, smoke_test: none, allow_failure: true }
+          - { target: i686-unknown-freebsd,   runner: ubuntu-latest, asset_suffix: freebsd-i686,   use_cross: true, smoke_test: none, allow_failure: true }
+          - { target: x86_64-unknown-netbsd,  runner: ubuntu-latest, asset_suffix: netbsd-x86_64,  use_cross: true, smoke_test: none, allow_failure: true }
 
-          # ── macOS Intel ─────────────────────────────────────────────────────
-          - target: x86_64-apple-darwin
-            runner: macos-latest
-            asset_suffix: macos-x86_64
-            use_cross: false
+          # ── Android / Termux — required, well-supported (bionic libc) ──────
+          - { target: aarch64-linux-android,      runner: ubuntu-latest, asset_suffix: android-arm64,  use_cross: true, smoke_test: qemu }
+          - { target: armv7-linux-androideabi,    runner: ubuntu-latest, asset_suffix: android-armv7,  use_cross: true, smoke_test: qemu }
 
-          # ── macOS Apple Silicon ─────────────────────────────────────────────
-          - target: aarch64-apple-darwin
-            runner: macos-latest
-            asset_suffix: macos-arm64
-            use_cross: false
+          # ── macOS — native runners ──────────────────────────────────────────
+          - { target: x86_64-apple-darwin,  runner: macos-latest, asset_suffix: macos-x86_64, use_cross: false, smoke_test: rosetta }
+          - { target: aarch64-apple-darwin, runner: macos-latest, asset_suffix: macos-arm64,  use_cross: false, smoke_test: native }
+
+          # ── Windows — native runners ────────────────────────────────────────
+          - { target: x86_64-pc-windows-msvc,  runner: windows-latest, asset_suffix: windows-x86_64, use_cross: false, smoke_test: native }
+          - { target: i686-pc-windows-msvc,    runner: windows-latest, asset_suffix: windows-i686,   use_cross: false, smoke_test: native }
+          - { target: aarch64-pc-windows-msvc, runner: windows-latest, asset_suffix: windows-arm64,  use_cross: false, smoke_test: none, allow_failure: true }
 
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install stable Rust
+      # Native builds need the target installed via rustup. Cross builds don't —
+      # `cross` supplies its own sysroot inside the Docker image, and several of
+      # the exotic targets above aren't even installable via `rustup target add`
+      # (no prebuilt std), so we must NOT request them here.
+      #
+      # NOTE: this is intentionally two separate steps rather than one step with
+      # `targets: ${{ matrix.use_cross && '' || matrix.target }}` — that ternary
+      # looks right but is wrong: GitHub Actions expressions treat '' as falsy,
+      # so `'' || matrix.target` always evaluates to matrix.target regardless of
+      # use_cross, silently defeating the whole point of the condition.
+      - name: Install stable Rust (native)
+        if: "!matrix.use_cross"
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
+
+      - name: Install stable Rust (cross)
+        if: matrix.use_cross
+        uses: dtolnay/rust-toolchain@stable
 
       - name: Cache cargo
         uses: actions/cache@v4
@@ -80,10 +109,21 @@ jobs:
             target
           key: release-${{ matrix.target }}-${{ hashFiles('**/Cargo.lock') }}
 
-      # cross compiles Linux musl + ARM targets without needing a local cross-compiler
-      - name: Install cross (Linux targets)
+      # Windows arm64 needs clang specifically — `ring`'s build script already
+      # forces it internally for this target, but we pin it explicitly too
+      # since it's harmless and documents the requirement.
+      - name: Select clang for Windows arm64
+        if: matrix.target == 'aarch64-pc-windows-msvc'
+        run: echo "CC=clang" >> $env:GITHUB_ENV
+
+      # Pinned prebuilt binary instead of `cargo install --git` — building cross
+      # from source on every one of the ~15 cross-target jobs is slow and ties
+      # your release to whatever cross-rs's main branch happens to do that day.
+      - name: Install cross
         if: matrix.use_cross
-        run: cargo install cross --git https://github.com/cross-rs/cross
+        run: |
+          curl -L https://github.com/cross-rs/cross/releases/download/v0.2.5/cross-x86_64-unknown-linux-musl.tar.gz | tar xz
+          sudo mv cross /usr/local/bin/
 
       - name: Build with cross
         if: matrix.use_cross
@@ -92,6 +132,26 @@ jobs:
       - name: Build with cargo
         if: "!matrix.use_cross"
         run: cargo build --release --target ${{ matrix.target }}
+
+      # ── Smoke test: actually run the binary, not just compile it ─────────────
+      - name: Smoke test (native)
+        if: matrix.smoke_test == 'native'
+        shell: bash
+        run: |
+          BIN="target/${{ matrix.target }}/release/${{ env.BINARY_NAME }}"
+          [ -f "$BIN.exe" ] && BIN="$BIN.exe"
+          "$BIN" --version
+
+      - name: Smoke test (QEMU via cross)
+        if: matrix.smoke_test == 'qemu'
+        run: cross run --release --target ${{ matrix.target }} -- --version
+
+      - name: Smoke test (macOS x86_64 via Rosetta)
+        if: matrix.smoke_test == 'rosetta'
+        continue-on-error: true   # Rosetta isn't guaranteed present on every runner image
+        run: |
+          softwareupdate --install-rosetta --agree-to-license || true
+          target/${{ matrix.target }}/release/${{ env.BINARY_NAME }} --version
 
       # ── Package ─────────────────────────────────────────────────────────────
       - name: Package (Unix)
@@ -112,6 +172,7 @@ jobs:
           echo "ASSET=$ARCHIVE" | Out-File -FilePath $env:GITHUB_ENV -Append
 
       - name: Upload artifact
+        if: env.ASSET != ''
         uses: actions/upload-artifact@v4
         with:
           name: ${{ env.BINARY_NAME }}-${{ matrix.asset_suffix }}
@@ -139,9 +200,6 @@ jobs:
         run: |
           sha256sum * > SHA256SUMS.txt
           cat SHA256SUMS.txt
-
-      - name: Extract version from tag
-        run: echo "VERSION=${GITHUB_REF_NAME#v}" >> $GITHUB_ENV
 
       - name: Create Release
         uses: softprops/action-gh-release@v2
@@ -183,6 +241,11 @@ jobs:
             cargo install crates-info
             ```
 
+            Other Linux architectures (arm, mips, riscv64, s390x, ppc64le), FreeBSD, NetBSD,
+            and Android/Termux builds are attached below. Some of the less common
+            architectures are best-effort — check `SHA256SUMS.txt` and the build logs
+            for this release if one is missing.
+
             ### Checksums
             See `SHA256SUMS.txt` attached below.
 
@@ -191,7 +254,7 @@ jobs:
 
   publish:
     name: Publish to crates.io
-    # needs: release
+    needs: release   # was previously commented out — publish could fire even if builds failed
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -200,4 +263,4 @@ jobs:
       - name: Publish
         run: cargo publish --allow-dirty
         env:
-          CARGO_REGISTRY_TOKEN: ${{ secrets.CRATES_TOKEN }}
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }} 
