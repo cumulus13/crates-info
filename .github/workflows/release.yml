@@ -58,11 +58,11 @@ jobs:
           - { target: armv5te-unknown-linux-musleabi,  runner: ubuntu-latest, asset_suffix: linux-armv5,   use_cross: true,  smoke_test: qemu }
 
           # ── Linux — best-effort (portable-C fallback in `ring`, less battle-tested) ──
-          - { target: mips-unknown-linux-musl,          runner: ubuntu-latest, asset_suffix: linux-mips,     use_cross: true, smoke_test: qemu, allow_failure: true }
-          - { target: mipsel-unknown-linux-musl,        runner: ubuntu-latest, asset_suffix: linux-mipsel,   use_cross: true, smoke_test: qemu, allow_failure: true }
-          - { target: mips64-unknown-linux-muslabi64,   runner: ubuntu-latest, asset_suffix: linux-mips64,   use_cross: true, smoke_test: qemu, allow_failure: true }
+          - { target: mips-unknown-linux-musl,         runner: ubuntu-latest, asset_suffix: linux-mips,     use_cross: true, smoke_test: qemu, allow_failure: true }
+          - { target: mipsel-unknown-linux-musl,       runner: ubuntu-latest, asset_suffix: linux-mipsel,   use_cross: true, smoke_test: qemu, allow_failure: true }
+          - { target: mips64-unknown-linux-muslabi64,  runner: ubuntu-latest, asset_suffix: linux-mips64,   use_cross: true, smoke_test: qemu, allow_failure: true }
           - { target: riscv64gc-unknown-linux-musl,     runner: ubuntu-latest, asset_suffix: linux-riscv64,  use_cross: true, smoke_test: qemu, allow_failure: true }
-          - { target: s390x-unknown-linux-gnu,          runner: ubuntu-latest, asset_suffix: linux-s390x,    use_cross: true, smoke_test: qemu, allow_failure: true }
+          - { target: s390x-unknown-linux-gnu,         runner: ubuntu-latest, asset_suffix: linux-s390x,    use_cross: true, smoke_test: qemu, allow_failure: true }
           - { target: powerpc64le-unknown-linux-gnu,    runner: ubuntu-latest, asset_suffix: linux-ppc64le,  use_cross: true, smoke_test: qemu, allow_failure: true }
 
           # ── BSD — best-effort (no QEMU test support in cross-rs, build-only) ──
@@ -87,6 +87,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Resolve release tag
+        shell: bash
         run: echo "RELEASE_TAG=${{ inputs.tag || github.ref_name }}" >> $GITHUB_ENV
 
       # Native builds need the target installed via rustup. Cross builds don't —
@@ -165,6 +166,7 @@ jobs:
       # ── Package ─────────────────────────────────────────────────────────────
       - name: Package (Unix)
         if: runner.os != 'Windows'
+        shell: bash
         run: |
           cd target/${{ matrix.target }}/release
           ARCHIVE="${{ env.BINARY_NAME }}-${{ env.RELEASE_TAG }}-${{ matrix.asset_suffix }}.tar.gz"
@@ -178,7 +180,7 @@ jobs:
           cd target/${{ matrix.target }}/release
           $ARCHIVE = "${{ env.BINARY_NAME }}-${{ env.RELEASE_TAG }}-${{ matrix.asset_suffix }}.zip"
           Compress-Archive -Path "${{ env.BINARY_NAME }}.exe" -DestinationPath "../../../$ARCHIVE"
-          echo "ASSET=$ARCHIVE" | Out-File -FilePath $env:GITHUB_ENV -Append
+          echo "ASSET=$ARCHIVE" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
       - name: Upload artifact
         if: env.ASSET != ''
@@ -192,10 +194,15 @@ jobs:
     name: Create GitHub Release
     needs: build
     runs-on: ubuntu-latest
+    if: |
+      always() &&
+      !cancelled() &&
+      (startsWith(github.ref, 'refs/tags/v') || inputs.tag != '')
     steps:
       - uses: actions/checkout@v4
 
       - name: Resolve release tag
+        shell: bash
         run: echo "RELEASE_TAG=${{ inputs.tag || github.ref_name }}" >> $GITHUB_ENV
 
       - name: Download all build artifacts
@@ -203,6 +210,17 @@ jobs:
         with:
           path: artifacts/
           merge-multiple: true
+
+      - name: Check for built artifacts
+        shell: bash
+        run: |
+          mkdir -p artifacts
+          COUNT=$(find artifacts -type f ! -name "SHA256SUMS.txt" | wc -l)
+          echo "Found $COUNT build artifacts"
+          if [ "$COUNT" -eq 0 ]; then
+            echo "::error::No build artifacts were found. Aborting release creation."
+            exit 1
+          fi
 
       - name: List artifacts
         run: ls -lh artifacts/
@@ -232,19 +250,19 @@ jobs:
 
             **macOS (Intel)**
             ```sh
-            curl -L https://github.com/cumulus13/crates-info/releases/download/${{ env.RELEASE_TAG }}/cratesinfo-${{ env.RELEASE_TAG }}-macos-x86_64.tar.gz | tar xz
+            curl -L [https://github.com/cumulus13/crates-info/releases/download/$](https://github.com/cumulus13/crates-info/releases/download/$){{ env.RELEASE_TAG }}/cratesinfo-${{ env.RELEASE_TAG }}-macos-x86_64.tar.gz | tar xz
             sudo mv cratesinfo /usr/local/bin/
             ```
 
             **macOS (Apple Silicon)**
             ```sh
-            curl -L https://github.com/cumulus13/crates-info/releases/download/${{ env.RELEASE_TAG }}/cratesinfo-${{ env.RELEASE_TAG }}-macOS-arm64.tar.gz | tar xz
+            curl -L [https://github.com/cumulus13/crates-info/releases/download/$](https://github.com/cumulus13/crates-info/releases/download/$){{ env.RELEASE_TAG }}/cratesinfo-${{ env.RELEASE_TAG }}-macOS-arm64.tar.gz | tar xz
             sudo mv cratesinfo /usr/local/bin/
             ```
 
             **Linux x86-64 (static)**
             ```sh
-            curl -L https://github.com/cumulus13/crates-info/releases/download/${{ env.RELEASE_TAG }}/cratesinfo-${{ env.RELEASE_TAG }}-linux-x86_64.tar.gz | tar xz
+            curl -L [https://github.com/cumulus13/crates-info/releases/download/$](https://github.com/cumulus13/crates-info/releases/download/$){{ env.RELEASE_TAG }}/cratesinfo-${{ env.RELEASE_TAG }}-linux-x86_64.tar.gz | tar xz
             sudo mv cratesinfo /usr/local/bin/
             ```
 
@@ -268,6 +286,11 @@ jobs:
     name: Publish to crates.io
     needs: release   # was previously commented out — publish could fire even if builds failed
     runs-on: ubuntu-latest
+    if: |
+      always() &&
+      !cancelled() &&
+      (startsWith(github.ref, 'refs/tags/v') || inputs.tag != '') &&
+      needs.release.result == 'success'
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
