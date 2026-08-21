@@ -374,7 +374,14 @@ fn term_width() -> usize {
     terminal_size()
         .map(|(Width(w), _)| w as usize)
         .unwrap_or(100)
-        .min(120)
+        // Clamp to a sane range: some terminals (piped output, narrow panes,
+        // certain CI runners) report widths below the smallest constant we
+        // subtract from this value elsewhere (e.g. `width - 10`). Without a
+        // floor, that subtraction underflows `usize` — panicking in debug
+        // builds and wrapping to a huge value in release builds, which then
+        // blows up `textwrap::wrap`. 40 is comfortably above every constant
+        // subtracted from this value in the codebase.
+        .clamp(40, 120)
 }
 
 fn separator(ch: char) {
@@ -565,23 +572,39 @@ fn make_skin() -> MadSkin {
     skin
 }
 
+/// crates.io always serves the README exactly as committed by the crate
+/// author — in the overwhelming majority of cases that's Markdown, and GFM
+/// Markdown is allowed to contain inline HTML (badges, `<details>`,
+/// `<sub>`, anchor tags for a table of contents, etc.). None of that makes
+/// the *document* HTML. Treating a README as HTML just because it contains
+/// a stray `<tag>` was flattening real Markdown (headers, lists, code
+/// fences) into plain, unstyled text for a huge share of real-world
+/// READMEs. Only fall back to HTML stripping for an actual full HTML
+/// document.
+fn looks_like_full_html_document(s: &str) -> bool {
+    let t = s.trim_start();
+    let lower_prefix: String = t.chars().take(15).collect::<String>().to_ascii_lowercase();
+    lower_prefix.starts_with("<!doctype") || lower_prefix.starts_with("<html")
+}
+
 fn render_text_readme(raw: &str) {
-    let is_html = raw.trim_start().starts_with('<') || raw.contains("</");
-    let text = if is_html {
+    let text = if looks_like_full_html_document(raw) {
         strip_html(raw)
     } else {
         raw.to_string()
     };
 
     let skin = make_skin();
-    let width = term_width() as u16;
 
-    // termimad wraps to width; print_text handles full markdown blocks
-    let area = termimad::Area::new(2, 0, width.saturating_sub(4), 9999);
-    if let Err(_) = skin.write_in_area(&text, &area) {
-        // fallback: plain print_text (no area positioning)
-        skin.print_text(&text);
-    }
+    // `write_in_area` positions/clips output to a fixed on-screen region —
+    // it's meant for TUI apps that manage their own alternate-screen
+    // viewport and scrolling. Used here it silently cut READMEs off once
+    // they exceeded the real terminal's visible row count, regardless of
+    // the (unrelated) height passed to `Area::new`. `print_text` streams
+    // fully wrapped, formatted Markdown straight to stdout — the correct
+    // one-shot way to dump an arbitrarily long document — so nothing gets
+    // clipped and normal terminal scrollback works.
+    skin.print_text(&text);
 }
 
 // ─────────────────────────────────────────────────────────────

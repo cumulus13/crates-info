@@ -5,10 +5,13 @@
 name: CI
 
 on:
+  # push:
+  #   branches: ["main", "master", "dev"]
   push:
-    branches: ["main", "master", "dev"]
+    tags:
+      - "v*"
   pull_request:
-    branches: ["main", "master"]
+    branches: ["main", "master", "dev"]
 
 env:
   CARGO_TERM_COLOR: always
@@ -55,7 +58,7 @@ jobs:
         include:
           # also test on oldest supported version (MSRV = 1.70)
           - os: ubuntu-latest
-            rust: "1.70"
+            rust: "1.85"
 
     steps:
       - uses: actions/checkout@v4

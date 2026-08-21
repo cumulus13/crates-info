@@ -1,7 +1,8 @@
 [package]
 name = "crates-info"
-version = "1.0.7"
+version = "1.0.8"
 edition = "2021"
+rust-version = "1.85"
 authors = ["Hadi Cahyadi <cumulus13@gmail.com>"]
 description = "A fast CLI tool to get detailed information about Rust crates from crates.io"
 homepage = "https://github.com/cumulus13/crates-info"

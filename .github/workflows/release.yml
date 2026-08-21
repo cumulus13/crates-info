@@ -25,7 +25,7 @@ on:
   push:
     tags:
       - "v*"
-    branches: ["master", "main"]
+    # branches: ["master", "main"]
   workflow_dispatch:            # manual escape hatch — run this from `gh` or the Actions tab
     inputs:
       tag:
