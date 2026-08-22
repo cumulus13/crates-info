@@ -1,4 +1,5 @@
-use clap::{Parser, Subcommand};
+use clap::{CommandFactory, Parser, Subcommand};
+use clap_version_flag::{colorful_version, parse_with_version};
 use colored::*;
 use reqwest::blocking::Client;
 use serde::{Deserialize, Serialize};
@@ -7,7 +8,6 @@ use termimad::crossterm::style::Color::*;
 use termimad::MadSkin;
 use terminal_size::{terminal_size, Width};
 use textwrap::wrap;
-use clap_version_flag::colorful_version;
 
 // ─────────────────────────────────────────────────────────────
 // CLI definition
@@ -18,14 +18,13 @@ use clap_version_flag::colorful_version;
     name = "cratesinfo",
     bin_name = "cratesinfo",
     author = "Hadi Cahyadi <cumulus13@gmail.com>",
-    version,
     about = "Get detailed info about Rust crates from crates.io",
     long_about = "A fast CLI tool to inspect Rust crates – metadata, versions, dependencies, features and README.",
     after_help = "EXAMPLES:\n  cratesinfo info serde\n  cratesinfo versions tokio\n  cratesinfo deps serde 1.0.195\n  cratesinfo search async runtime\n  cratesinfo readme actix-web\n  cratesinfo owners tokio\n  cratesinfo by dtolnay\n  cratesinfo by alexcrichton --sort recent --limit 20\n  cratesinfo by burntsushi --limit 0"
 )]
 struct Cli {
     #[command(subcommand)]
-    command: Commands,
+    command: Option<Commands>,
 }
 
 #[derive(Subcommand, Debug)]
@@ -1276,12 +1275,33 @@ fn cmd_owners(client: &CratesClient, name: &str) {
 // ─────────────────────────────────────────────────────────────
 
 fn main() {
-    let args: Vec<String> = std::env::args().collect();
-    if args.len() == 2 && (args[1] == "-V" || args[1] == "--version") {
-        let version = colorful_version!();
-        version.print_and_exit();
-    }
-    let cli = Cli::parse();
+    // `parse_with_version` wires `-V`/`--version` directly into clap's own
+    // parsing (via `disable_version_flag` + a custom arg), instead of
+    // hand-checking `std::env::args()` before `Cli::parse()`.
+    //
+    // That alone isn't enough, though: clap validates a *required*
+    // subcommand before it ever looks at custom flags — only clap's
+    // built-in `-h`/`-V` get a special bypass for that check, and
+    // `disable_version_flag` removes exactly that bypass along with the
+    // flag itself. With `command: Commands` (required), `cratesinfo
+    // --version` used to fail clap's "missing required subcommand" check
+    // first and print the full help text with exit code 2 instead of the
+    // version string — reproduced locally regardless of platform, so this
+    // wasn't a QEMU/cross-compilation quirk, just a required-subcommand +
+    // custom-version-flag interaction. Making `command` optional (`Option<
+    // Commands>`) sidesteps clap's required-subcommand validation entirely,
+    // so `--version` now reaches our check unconditionally; the `None` arm
+    // below reproduces the original "no subcommand" help+exit(2) behavior.
+    let version = colorful_version!();
+    let cli: Cli = match parse_with_version(Cli::command(), &version) {
+        Ok(cli) => cli,
+        Err(e) => e.exit(),
+    };
+    let Some(command) = cli.command else {
+        Cli::command().print_help().ok();
+        println!();
+        std::process::exit(2);
+    };
     let client = CratesClient::new();
 
     println!();
@@ -1294,7 +1314,7 @@ fn main() {
     );
     println!();
 
-    match cli.command {
+    match command {
         Commands::Info { crate_name, readme } => {
             cmd_info(&client, &crate_name, readme);
         }
